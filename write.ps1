@@ -24,15 +24,4 @@ $dataJson | Write-Host
 $dataBytes = [Text.Encoding]::UTF8.GetBytes($dataJson)
 
 $mutex = Get-Mutex -MutexName $MutexName
-
-try {
-    Write-Warning "calling mutex.WaitOne()..."
-    $mutex.WaitOne() | Out-Null
-
-    Invoke-NewOrUpdateMemoryMappedFileContent -MapName $MapName -DataBytes $dataBytes
-} catch {
-    throw $_
-} finally {
-    Write-Warning "calling mutex.ReleaseMutex()..."
-    $mutex.ReleaseMutex()
-}
+Invoke-NewOrUpdateMemoryMappedFileContentSafely -Mutex $mutex -MapName $MapName -DataBytes $dataBytes

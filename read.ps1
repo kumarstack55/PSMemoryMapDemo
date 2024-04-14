@@ -2,19 +2,7 @@
 . (Join-Path $PSScriptRoot "UtilityFunctions.ps1")
 
 $mutex = Get-Mutex -MutexName $MutexName
-$buffer = $null
-try {
-    Write-Warning "calling mutex.WaitOne()..."
-    $mutex.WaitOne() | Out-Null
-
-    $buffer = Get-MemoryMappedFileContentAsBytes -MapName $MapName
-} catch {
-    throw $_
-} finally {
-    Write-Warning "calling mutex.ReleaseMutex()..."
-    $mutex.ReleaseMutex()
-}
-
+$buffer = Get-MemoryMappedFileContentAsBytesSafely -Mutex $mutex $MapName
 if ($null -ne $buffer) {
     $dataStringWithZeros = [Text.Encoding]::UTF8.GetString($buffer)
     $dataString = $dataStringWithZeros.Trim([char]0)

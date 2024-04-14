@@ -26,6 +26,26 @@ function Invoke-NewOrUpdateMemoryMappedFileContent {
     return $null
 }
 
+function Invoke-NewOrUpdateMemoryMappedFileContentSafely {
+    param(
+        [Parameter(Mandatory)][System.Threading.Mutex]$Mutex,
+        [Parameter(Mandatory)][string]$MapName,
+        [Parameter(Mandatory)][byte[]]$DataBytes
+    )
+
+    try {
+        Write-Warning "calling mutex.WaitOne()..."
+        $Mutex.WaitOne() | Out-Null
+
+        Invoke-NewOrUpdateMemoryMappedFileContent -MapName $MapName -DataBytes $DataBytes
+    } catch {
+        throw $_
+    } finally {
+        Write-Warning "calling Mutex.ReleaseMutex()..."
+        $Mutex.ReleaseMutex()
+    }
+}
+
 function Get-MemoryMappedFileContentAsBytes {
     param([Parameter(Mandatory)][string]$MapName)
 
@@ -48,6 +68,27 @@ function Get-MemoryMappedFileContentAsBytes {
         if ($null -ne $viewAccessor) {
             $viewAccessor.Dispose()
         }
+    }
+    return $buffer
+}
+
+function Get-MemoryMappedFileContentAsBytesSafely {
+    param(
+        [Parameter(Mandatory)][System.Threading.Mutex]$Mutex,
+        [Parameter(Mandatory)][string]$MapName
+    )
+
+    $buffer = $null
+    try {
+        Write-Warning "calling Mutex.WaitOne()..."
+        $Mutex.WaitOne() | Out-Null
+
+        $buffer = Get-MemoryMappedFileContentAsBytes -MapName $MapName
+    } catch {
+        throw $_
+    } finally {
+        Write-Warning "calling Mutex.ReleaseMutex()..."
+        $Mutex.ReleaseMutex()
     }
     return $buffer
 }
