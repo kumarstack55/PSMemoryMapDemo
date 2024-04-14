@@ -1,7 +1,4 @@
-﻿$MapName = "TestMapName1"
-$MutexName = "Global\TestMutexName1"
-
-function Get-Mutex {
+﻿function Get-Mutex {
     param([Parameter(Mandatory)][string]$MutexName)
 
     $initiallyOwned = $false

@@ -1,5 +1,5 @@
-﻿$commonPath = Join-Path $PSScriptRoot "common.ps1"
-. $commonPath
+﻿. (Join-Path $PSScriptRoot "vars.ps1")
+. (Join-Path $PSScriptRoot "UtilityFunctions.ps1")
 
 $mutex = Get-Mutex -MutexName $MutexName
 $buffer = $null
