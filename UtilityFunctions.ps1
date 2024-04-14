@@ -13,20 +13,32 @@ function Invoke-NewOrUpdateMemoryMappedFileContent {
     )
 
     $MemoryMappedFileClass = [System.IO.MemoryMappedFiles.MemoryMappedFile]
+    $createOrOpenCapacity = $global:DataBytes.Length + 1
+    $memoryMappedFile = $MemoryMappedFileClass::CreateOrOpen($MapName, $createOrOpenCapacity)
 
-    $capacity = $DataBytes.Length + 1
-    Write-Warning ("capacity: {0}" -f $capacity)
-
-    $memoryMappedFile = $MemoryMappedFileClass::CreateOrOpen($MapName, $capacity)
-    $viewStream = $memoryMappedFile.CreateViewStream()
-    $viewStream.Write($DataBytes, 0, $DataBytes.Length)
-    $viewStream.WriteByte([byte]0)
-    $viewStream.Dispose()
-
-    return $null
+    # CreateViewStream() は使わない。
+    # CreateViewStream() は ローカル変数で viewStream を扱うときに、
+    # 稀にマップト・ファイルを作れないように見えるため。
+    $viewAccessor = $memoryMappedFile.CreateViewAccessor()
+    $viewAccessor.WriteArray(0, $DataBytes, 0, $DataBytes.Length)
+    $viewAccessor.Dispose()
 }
 
-function Invoke-NewOrUpdateMemoryMappedFileContentSafely {
+function Get-MemoryMappedFileContentAsBytes {
+    param([Parameter(Mandatory)][string]$MapName)
+
+    $MemoryMappedFileClass = [System.IO.MemoryMappedFiles.MemoryMappedFile]
+    $memoryMappedFile = $MemoryMappedFileClass::OpenExisting($mapName)
+    $viewAccessor = $memoryMappedFile.CreateViewAccessor()
+    $capacity = $viewAccessor.Capacity
+    $bufferLength = $capacity
+    $buffer = New-Object byte[] $bufferLength
+    $viewAccessor.ReadArray(0, $buffer, 0, $buffer.Length) | Out-Null
+    $viewAccessor.Dispose()
+    return $buffer
+}
+
+function Invoke-NewOrUpdateMemoryMappedFileContentWithExclusiveControl {
     param(
         [Parameter(Mandatory)][System.Threading.Mutex]$Mutex,
         [Parameter(Mandatory)][string]$MapName,
@@ -34,45 +46,16 @@ function Invoke-NewOrUpdateMemoryMappedFileContentSafely {
     )
 
     try {
-        Write-Warning "calling mutex.WaitOne()..."
         $Mutex.WaitOne() | Out-Null
-
         Invoke-NewOrUpdateMemoryMappedFileContent -MapName $MapName -DataBytes $DataBytes
     } catch {
         throw $_
     } finally {
-        Write-Warning "calling Mutex.ReleaseMutex()..."
         $Mutex.ReleaseMutex()
     }
 }
 
-function Get-MemoryMappedFileContentAsBytes {
-    param([Parameter(Mandatory)][string]$MapName)
-
-    $buffer = $null
-    $viewAccessor = $null
-    try {
-        $MemoryMappedFileClass = [System.IO.MemoryMappedFiles.MemoryMappedFile]
-        $memoryMappedFile = $MemoryMappedFileClass::OpenExisting($MapName)
-        $viewAccessor = $memoryMappedFile.CreateViewAccessor()
-
-        $capacity = $viewAccessor.Capacity
-        Write-Warning ("capacity: {0}" -f $capacity)
-
-        $bufferLength = $capacity
-        $buffer = New-Object byte[] $bufferLength
-        $viewAccessor.ReadArray(0, $buffer, 0, $buffer.Length) | Out-Null
-    } catch {
-        throw $_
-    } finally {
-        if ($null -ne $viewAccessor) {
-            $viewAccessor.Dispose()
-        }
-    }
-    return $buffer
-}
-
-function Get-MemoryMappedFileContentAsBytesSafely {
+function Get-MemoryMappedFileContentAsBytesWithExclusiveControl {
     param(
         [Parameter(Mandatory)][System.Threading.Mutex]$Mutex,
         [Parameter(Mandatory)][string]$MapName
@@ -80,22 +63,19 @@ function Get-MemoryMappedFileContentAsBytesSafely {
 
     $buffer = $null
     try {
-        Write-Warning "calling Mutex.WaitOne()..."
         $Mutex.WaitOne() | Out-Null
-
         $buffer = Get-MemoryMappedFileContentAsBytes -MapName $MapName
     } catch {
         throw $_
     } finally {
-        Write-Warning "calling Mutex.ReleaseMutex()..."
         $Mutex.ReleaseMutex()
     }
     return $buffer
 }
 
-function Invoke-StartSleep {
-    param([Parameter(Mandatory)][int]$Seconds)
-
-    Write-Host "Sleeping..."
-    Start-Sleep $Seconds
-}
+#function Invoke-StartSleep {
+#    param([Parameter(Mandatory)][int]$Seconds)
+#
+#    Write-Host "Sleeping..."
+#    Start-Sleep $Seconds
+#}
