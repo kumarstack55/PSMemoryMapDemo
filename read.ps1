@@ -1,27 +1,31 @@
 ﻿$commonPath = Join-Path $PSScriptRoot "common.ps1"
 . $commonPath
 
-$initiallyOwned = $false
-$mutex = [System.Threading.Mutex]::new($initiallyOwned, $MutexName)
+$mutex = Get-Mutex -MutexName $MutexName
+$buffer = $null
+try {
+    Write-Warning "calling mutex.WaitOne()..."
+    $mutex.WaitOne() | Out-Null
 
-$MemoryMappedFileClass = [System.IO.MemoryMappedFiles.MemoryMappedFile]
+    $buffer = Get-MemoryMappedFileContentAsBytes -MapName $MapName
+} catch {
+    throw $_
+} finally {
+    Write-Warning "calling mutex.ReleaseMutex()..."
+    $mutex.ReleaseMutex()
+}
 
-$mutex.WaitOne() | Out-Null
-$memoryMappedFile = $MemoryMappedFileClass::OpenExisting($MapName)
-$viewAccessor = $memoryMappedFile.CreateViewAccessor()
-$capacity = $viewAccessor.Capacity
-"capacity: {0}" -f $capacity
-$bufferLength = $capacity
-$buffer = New-Object byte[] $bufferLength
-$viewAccessor.ReadArray(0, $buffer, 0, $buffer.Length) | Out-Null
+if ($null -ne $buffer) {
+    $dataStringWithZeros = [Text.Encoding]::UTF8.GetString($buffer)
+    $dataString = $dataStringWithZeros.Trim([char]0)
 
-Start-Sleep 5
+    $dataString | Write-Host
 
-$mutex.ReleaseMutex()
+    $pso = $dataString | ConvertFrom-Json
 
-$dataStringWithZeros = [Text.Encoding]::ASCII.GetString($buffer)
-$dataString = $dataStringWithZeros.Trim([char]0)
-$pso = $dataString | ConvertFrom-Json
-$pso
+    $pso | Write-Host
 
-$viewAccessor.Dispose()
+    $lastWriteTimeUtc = $pso.LastWriteTime
+    $lastWriteTime = $lastWriteTimeUtc.ToLocalTime()
+    "lastWriteTime: {0}" -f $lastWriteTime
+}

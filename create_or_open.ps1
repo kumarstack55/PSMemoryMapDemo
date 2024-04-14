@@ -1,30 +1,38 @@
 ﻿$commonPath = Join-Path $PSScriptRoot "common.ps1"
 . $commonPath
 
-$now = Get-Date -UFormat "%s"
+$nowLocaltime = Get-Date
+
+# オブジェクトに格納する時刻を UTC にする。
+# JSON変換時に、タイムゾーンの情報が保存されないために、
+# メモリ・マップト・ファイルをもとにデータを読む際に、時刻のズレが発生する。
+# これを回避するために UTC で格納する。
+$now = $nowLocaltime.ToUniversalTime()
 
 $dataPso = [pscustomobject]@{
     "key1"="value1"
-    "key2"=$now
+    "key2"="あ"
+    "LastWriteTime"=$now
 }
 
+$dataPso | Write-Host
+
 $dataJson = $dataPso | ConvertTo-Json
-$dataBytes = [Text.Encoding]::ASCII.GetBytes($dataJson)
 
-$MemoryMappedFileClass = [System.IO.MemoryMappedFiles.MemoryMappedFile]
-$capacity = $dataBytes.Length
-"capacity: {0}" -f $capacity
+$dataJson | Write-Host
 
-$initiallyOwned = $false
-$mutex = [System.Threading.Mutex]::new($initiallyOwned, $MutexName)
+$dataBytes = [Text.Encoding]::UTF8.GetBytes($dataJson)
 
-$mutex.WaitOne() | Out-Null
-$memoryMappedFile = $MemoryMappedFileClass::CreateOrOpen($MapName, $capacity)
-$viewAccessor = $memoryMappedFile.CreateViewAccessor()
-$viewAccessor.WriteArray(0, $dataBytes, 0, $dataBytes.Length)
-$viewAccessor.Dispose()
+$mutex = Get-Mutex -MutexName $MutexName
 
-Start-Sleep 5
+try {
+    Write-Warning "calling mutex.WaitOne()..."
+    $mutex.WaitOne() | Out-Null
 
-$mutex.ReleaseMutex()
-
+    Invoke-NewOrUpdateMemoryMappedFileContent -MapName $MapName -DataBytes $dataBytes
+} catch {
+    throw $_
+} finally {
+    Write-Warning "calling mutex.ReleaseMutex()..."
+    $mutex.ReleaseMutex()
+}
